@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Builds & Caches
+android/.gradle
+android/app/build
+build/
+.gradle/
+*.log
+
+# Raw reverse-engineering dumps & scratch scripts
+raw-decompiled/
+extract_*.py
+
+# Python scripts/caches
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+Thumbs.db
