@@ -1,9 +1,14 @@
-import ZegoExpressEngine, {
-  ZegoScenario,
-  ZegoUser,
-  ZegoRoomConfig,
-} from 'zego-express-engine-reactnative';
+import { NativeModules } from 'react-native';
 import { Config } from '../constants/Config';
+
+let ZegoExpressEngine: any = null;
+try {
+  if (NativeModules.RCTZegoExpressEngine) {
+    ZegoExpressEngine = require('zego-express-engine-reactnative').default;
+  }
+} catch (e) {
+  // Running in Expo Go without native Zego binary
+}
 
 class ZegoService {
   private isInitialized = false;
@@ -11,8 +16,14 @@ class ZegoService {
 
   async init() {
     if (this.isInitialized) return;
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) {
+      console.log('[ZegoService] Running in Expo Go simulated mode (no native Zego binary).');
+      this.isInitialized = true;
+      return;
+    }
+
     if (!Config.ZEGO_APP_ID || !Config.ZEGO_APP_SIGN) {
-      console.warn('[ZegoService] AppID or AppSign not configured yet in src/constants/Config.ts');
+      console.warn('[ZegoService] AppID or AppSign not configured in src/constants/Config.ts');
       return;
     }
 
@@ -20,7 +31,7 @@ class ZegoService {
       const profile = {
         appID: Config.ZEGO_APP_ID,
         appSign: Config.ZEGO_APP_SIGN,
-        scenario: ZegoScenario.General,
+        scenario: 0,
       };
       await ZegoExpressEngine.createEngineWithProfile(profile);
       this.isInitialized = true;
@@ -33,18 +44,18 @@ class ZegoService {
   async loginRoom(roomId: string, user: { userId: string; userName: string }): Promise<boolean> {
     try {
       await this.init();
-      const zegoUser: ZegoUser = {
+      if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) {
+        this.currentRoomId = roomId;
+        console.log(`[ZegoService:Expo] Joined room (simulated): ${roomId}`);
+        return true;
+      }
+
+      await ZegoExpressEngine.instance().loginRoom(roomId, {
         userID: user.userId,
         userName: user.userName,
-      };
-      const config: ZegoRoomConfig = {
-        maxMemberCount: 0,
-        isUserStatusNotify: true,
-      };
+      }, { maxMemberCount: 0, isUserStatusNotify: true });
 
-      await ZegoExpressEngine.instance().loginRoom(roomId, zegoUser, config);
       this.currentRoomId = roomId;
-      console.log(`[ZegoService] Joined room: ${roomId}`);
       return true;
     } catch (e: any) {
       console.error('[ZegoService] Login room failed:', e.message);
@@ -53,15 +64,19 @@ class ZegoService {
   }
 
   async startPublishing(streamId: string): Promise<void> {
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) {
+      console.log(`[ZegoService:Expo] Publishing stream (simulated): ${streamId}`);
+      return;
+    }
     try {
       await ZegoExpressEngine.instance().startPublishingStream(streamId);
-      console.log(`[ZegoService] Publishing stream: ${streamId}`);
     } catch (e: any) {
       console.error('[ZegoService] Start publishing failed:', e.message);
     }
   }
 
   async stopPublishing(): Promise<void> {
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) return;
     try {
       await ZegoExpressEngine.instance().stopPublishingStream();
     } catch (e: any) {
@@ -70,6 +85,10 @@ class ZegoService {
   }
 
   async startPlaying(streamId: string, view?: any): Promise<void> {
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) {
+      console.log(`[ZegoService:Expo] Playing stream (simulated): ${streamId}`);
+      return;
+    }
     try {
       await ZegoExpressEngine.instance().startPlayingStream(streamId, view);
     } catch (e: any) {
@@ -78,6 +97,7 @@ class ZegoService {
   }
 
   async stopPlaying(streamId: string): Promise<void> {
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) return;
     try {
       await ZegoExpressEngine.instance().stopPlayingStream(streamId);
     } catch (e: any) {
@@ -86,6 +106,7 @@ class ZegoService {
   }
 
   async setMuteMicrophone(mute: boolean): Promise<void> {
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) return;
     try {
       await ZegoExpressEngine.instance().muteMicrophone(mute);
     } catch (e: any) {
@@ -95,11 +116,14 @@ class ZegoService {
 
   async leaveRoom(): Promise<void> {
     if (!this.currentRoomId) return;
+    if (!ZegoExpressEngine || !NativeModules.RCTZegoExpressEngine) {
+      this.currentRoomId = null;
+      return;
+    }
     try {
       await this.stopPublishing();
       await ZegoExpressEngine.instance().logoutRoom(this.currentRoomId);
       this.currentRoomId = null;
-      console.log('[ZegoService] Left room successfully');
     } catch (e: any) {
       console.error('[ZegoService] Logout room failed:', e.message);
     }

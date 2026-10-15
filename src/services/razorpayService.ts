@@ -1,11 +1,20 @@
-import RazorpayCheckout from 'react-native-razorpay';
+import { NativeModules, Alert } from 'react-native';
 import { Config } from '../constants/Config';
 import { apiClient } from '../api/client';
 import { Endpoints } from '../api/endpoints';
 
+let RazorpayCheckout: any = null;
+try {
+  if (NativeModules.RNRazorpayCheckout || NativeModules.RazorpayCheckout) {
+    RazorpayCheckout = require('react-native-razorpay').default;
+  }
+} catch (e) {
+  // Running in Expo Go
+}
+
 export interface CheckoutOptions {
   description: string;
-  amountInr: number; // in Rupees
+  amountInr: number;
   currency?: string;
   orderId?: string;
   userName?: string;
@@ -15,13 +24,31 @@ export interface CheckoutOptions {
 
 class PaymentService {
   async checkout(options: CheckoutOptions): Promise<{ success: boolean; paymentId?: string; error?: string }> {
+    // If running in Expo Go without native Razorpay binary
+    if (!RazorpayCheckout) {
+      console.log('[PaymentService:Expo] Simulating Razorpay checkout in Expo Go');
+      return new Promise((resolve) => {
+        Alert.alert(
+          'Expo Go Test Payment',
+          `Simulate successful recharge of ₹${options.amountInr}?`,
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve({ success: false, error: 'Payment cancelled' }) },
+            {
+              text: 'Simulate Success',
+              onPress: () => resolve({ success: true, paymentId: `pay_test_${Date.now()}` }),
+            },
+          ]
+        );
+      });
+    }
+
     try {
       const checkoutData = {
         description: options.description,
         image: `${Config.CDN_BASE_URL}/logo.png`,
         currency: options.currency || 'INR',
         key: Config.RAZORPAY_KEY_ID,
-        amount: Math.round(options.amountInr * 100), // convert to paise
+        amount: Math.round(options.amountInr * 100),
         name: Config.APP_NAME,
         order_id: options.orderId || undefined,
         prefill: {
@@ -34,7 +61,6 @@ class PaymentService {
 
       const data = await RazorpayCheckout.open(checkoutData);
       
-      // Notify backend of payment
       if (data.razorpay_payment_id) {
         await apiClient.post(Endpoints.wallet.razorpayPaymentRecords, {
           paymentId: data.razorpay_payment_id,
